@@ -61,7 +61,8 @@ class RoverService(object):
 
     @property
     def service_name(self) -> str:
-        return f"com.victronenergy.solarcharger.{self._tty}"
+        name = self._tty.split("/")[-1]
+        return f"com.victronenergy.solarcharger.{name}"
 
     @property
     def connection(self) -> str:
@@ -166,7 +167,7 @@ def main():  # For debugging purposes, run this script directly
     # Have a mainloop, so we can send/receive asynchronous calls to and from dbus
     DBusGMainLoop(set_as_default=True)
 
-    RoverService(tty="ttyUSB0")
+    RoverService(tty="/dev/ttyUSB0")  # TODO: accept argument from CLI argument
 
     logging.info("Connected to dbus, and switching over to GLib.MainLoop() (= event based)")
     mainloop = GLib.MainLoop()
