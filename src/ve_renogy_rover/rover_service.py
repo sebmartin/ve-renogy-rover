@@ -5,11 +5,16 @@ Renogy MPPT example see:
 https://github.com/sstoops/dbus-renogy-dcc/blob/main/dbus-renogy-dcc.py
 """
 
+import argparse
 import logging
 import sys
+from enum import IntEnum
+from importlib.metadata import PackageNotFoundError, version
+
+from pyrover.renogy_rover import RenogyRoverController as Rover
+from pyrover.types import ChargingState
 
 from ve_renogy_rover.device_info import DeviceInfo
-from pyrover.renogy_rover import RenogyRoverController as Rover
 
 # Add the paths to some system packages
 sys.path.insert(1, "/usr/lib/python3.8/site-packages")
@@ -17,11 +22,51 @@ sys.path.insert(1, "/opt/victronenergy/dbus-systemcalc-py/ext/velib_python")
 from gi.repository import GLib
 from vedbus import VeDbusService
 
-VERSION = "v0.1.0"
+try:
+    VERSION = version("ve-renogy-rover")  # Replace with your actual package name
+except PackageNotFoundError:
+    VERSION = "v0.1.0"
+
 CUSTOM_PRODUCT_ID = 0xF102 # Custom product ID for Renogy Rover MPPT, randomly chosen
-UPDATE_INTERVAL = 1000  # milliseconds
+UPDATE_INTERVAL = 3000  # milliseconds
 SETTINGS_PATH = "/data/renogy/rover.json"
 
+class OperationMode(IntEnum):
+    OFF = 0
+    LIMITING = 1
+    TRACKING = 2
+
+    @staticmethod
+    def from_rover(charging_state: ChargingState) -> "OperationMode | None":
+        if charging_state == ChargingState.DEACTIVATED:
+            return OperationMode.OFF
+        elif charging_state == ChargingState.CURRENT_LIMITING:
+            return OperationMode.LIMITING
+        elif charging_state == ChargingState.MPPT:
+            return OperationMode.TRACKING
+        return None
+
+class State(IntEnum):
+    OFF = 0
+    FAULT = 2
+    BULK = 3
+    ABSORPTION = 4
+    FLOAT = 5
+    STORAGE = 6
+    EQUALIZE = 7
+    EXTERNAL_CONTROL = 252
+
+    @staticmethod
+    def from_rover(charging_state: ChargingState) -> "State | None":
+        if charging_state == ChargingState.DEACTIVATED:
+            return State.OFF
+        elif charging_state == ChargingState.BOOST:
+            return State.BULK
+        elif charging_state == ChargingState.FLOATING:
+            return State.FLOAT
+        elif charging_state == ChargingState.EQUALIZING:
+            return State.EQUALIZE
+        return None
 
 class RoverService(object):
     """
@@ -118,12 +163,14 @@ class RoverService(object):
         paths = {
             "/NrOfTrackers": 1,  # Rovers are single tracker devices
             "/Pv/V": 0,  # Voltage in Volts, exists only for single tracker devices
-            "/Pv/I": 0,  # Power in Watts, exists only for single tracker devices
+            "/Pv/I": 0,  # Current in Amps, exists only for single tracker devices
             "/Yield/Power": 0,  # Power in Watts, total yield power
-            "/MppOperationMode": 2,  # MPPT Tracker active
+            "/MppOperationMode": OperationMode.OFF.value,  # MPPT Tracker deactivated
             "/Dc/0/Voltage": 0,  # Actual battery voltage
             "/Dc/0/Current": 0,  # Actual battery charging current
             "/Mode": 1,   # 1=On; 4=Off
+            "/State": State.OFF.value,   # 1=On; 4=Off
+            "/ErrorCode": 0,
             "/DeviceOffReason": 0,   # Bitmask indicating the reason(s) that the MPPT is in Off State
         }
         for path, initial in paths.items():
@@ -139,16 +186,24 @@ class RoverService(object):
         rover = self.rover
         updates = {
             "/Pv/V":rover.solar_voltage(),
-            "/Pv/I":rover.charging_power(),
+            "/Pv/I":rover.charging_current(),
             "/Yield/Power":rover.solar_voltage() * rover.solar_current(),
             "/Dc/0/Voltage":rover.battery_voltage(),
             "/Dc/0/Current":rover.charging_current(),
+            "/Link/TemperatureSense": rover.battery_temperature(),
+            "/Link/TemperatureSenseActive": True,
         }
+
+        if operation_mode := OperationMode.from_rover(rover.charging_state()):
+            updates["/MppOperationMode"] = operation_mode.value
+
+        if state := State.from_rover(rover.charging_state()):
+            updates["/State"] = state.value
 
         with self._dbusservice as s:
             for path, value in updates.items():
                 s[path] = value
-                logging.debug("%s: %s" % (path, s[path]))
+                logging.debug(f"{path}: {s[path]}")
         return True
 
     def _on_custom_name_change(self, path, value):
@@ -160,18 +215,43 @@ class RoverService(object):
         self.device_info.to_file(SETTINGS_PATH)
         return True
 
-def main():  # For debugging purposes, run this script directly
-    logging.basicConfig(level=logging.DEBUG)
 
-    from dbus.mainloop.glib import DBusGMainLoop
-    # Have a mainloop, so we can send/receive asynchronous calls to and from dbus
-    DBusGMainLoop(set_as_default=True)
+def main():
+    parser = argparse.ArgumentParser(description="DBUS Driver for Renogy Rover MPPT for Venus OS")
+    parser.add_argument("device", nargs="?", help="Serial device to use, e.g. /dev/ttyUSB0")
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
-    RoverService(tty="/dev/ttyUSB0")  # TODO: accept argument from CLI argument
+    args = parser.parse_args()
 
-    logging.info("Connected to dbus, and switching over to GLib.MainLoop() (= event based)")
-    mainloop = GLib.MainLoop()
-    mainloop.run()
+    log_level = logging.DEBUG if args.debug else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format="[%(asctime)s] %(levelname)s: %(message)s"
+    )
+
+    if not args.device:
+        logging.error("No device specified. Use --help for usage.")
+        sys.exit(1)
+
+    logging.info(f"Starting driver on device: {args.device}")
+
+    try:
+        from dbus.mainloop.glib import DBusGMainLoop
+
+        # Have a mainloop, so we can send/receive asynchronous calls to and from dbus
+        DBusGMainLoop(set_as_default=True)
+
+        RoverService(tty=args.device)
+        logging.info("Service initialization complete.")
+
+        mainloop = GLib.MainLoop()
+        mainloop.run()
+
+    except Exception as e:
+        logging.error(f"Driver encountered an error: {e}")
+        sys.exit(1)
+
+    logging.info("Driver exiting cleanly")
 
 
 if __name__ == "__main__":

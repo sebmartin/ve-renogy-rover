@@ -1,0 +1,6 @@
+#!/bin/bash
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LOG_FILE="$SCRIPT_DIR/driver.log"
+
+python3 -m ve_renogy_rover.main "$@" 2>> "$LOG_FILE"
