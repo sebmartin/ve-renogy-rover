@@ -137,7 +137,7 @@ class RoverService(object):
         # Get a few static values from the device
         self.device_info.update_from_device(self.rover)
 
-        self._dbusservice = VeDbusService(self.service_name)
+        self._dbusservice = VeDbusService(self.service_name, register=False)
 
         # Create the management objects, as specified in the ccgx dbus-api document
         self._dbusservice.add_path("/Mgmt/ProcessName", __file__)
@@ -168,6 +168,8 @@ class RoverService(object):
             "/MppOperationMode": OperationMode.OFF.value,  # MPPT Tracker deactivated
             "/Dc/0/Voltage": 0,  # Actual battery voltage
             "/Dc/0/Current": 0,  # Actual battery charging current
+            "/Link/TemperatureSense": 0,
+            "/Link/TemperatureSenseActive": False,
             "/Mode": 1,   # 1=On; 4=Off
             "/State": State.OFF.value,   # 1=On; 4=Off
             "/ErrorCode": 0,
