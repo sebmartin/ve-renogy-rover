@@ -196,10 +196,10 @@ class RoverService(object):
             "/Link/TemperatureSenseActive": True,
         }
 
-        if operation_mode := OperationMode.from_rover(rover.charging_state()):
+        if (operation_mode := OperationMode.from_rover(rover.charging_state())) is not None:
             updates["/MppOperationMode"] = operation_mode.value
 
-        if state := State.from_rover(rover.charging_state()):
+        if (state := State.from_rover(rover.charging_state())) is not None:
             updates["/State"] = state.value
 
         with self._dbusservice as s:
