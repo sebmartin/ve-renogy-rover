@@ -1,0 +1,3 @@
+#!/bin/sh
+exec 2>&1
+exec python -m ve_renogy_rover.rover_service TTY
