@@ -261,7 +261,10 @@ def main():
         logging.error("No device specified. Use --help for usage.")
         sys.exit(1)
 
-    logging.info(f"Starting driver on device: {args.device}")
+    device = args.device.strip()
+    device = device if device.startswith("/") else f"/dev/{device}"
+
+    logging.info(f"Starting driver on device: {device}")
 
     try:
         from dbus.mainloop.glib import DBusGMainLoop
@@ -269,7 +272,7 @@ def main():
         # Have a mainloop, so we can send/receive asynchronous calls to and from dbus
         DBusGMainLoop(set_as_default=True)
 
-        RoverService(tty=args.device)
+        RoverService(tty=device)
         logging.info("Service initialization complete.")
 
         mainloop = GLib.MainLoop()
