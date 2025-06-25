@@ -6,12 +6,12 @@ https://github.com/sstoops/dbus-renogy-dcc/blob/main/dbus-renogy-dcc.py
 """
 
 import argparse
-from collections.abc import Callable
+from typing import Callable
 import logging
 import sys
 from enum import IntEnum
 from importlib.metadata import PackageNotFoundError, version
-from typing import Any
+from typing import Any, Optional
 
 from pyrover.renogy_rover import RenogyRoverController as Rover
 from pyrover.types import ChargingState
@@ -40,7 +40,7 @@ class OperationMode(IntEnum):
     TRACKING = 2
 
     @staticmethod
-    def from_rover(charging_state: ChargingState | None) -> "OperationMode | None":
+    def from_rover(charging_state: Optional[ChargingState]) -> Optional["OperationMode"]:
         if charging_state == ChargingState.DEACTIVATED:
             return OperationMode.OFF
         elif charging_state == ChargingState.CURRENT_LIMITING:
@@ -61,7 +61,7 @@ class State(IntEnum):
     EXTERNAL_CONTROL = 252
 
     @staticmethod
-    def from_rover(charging_state: ChargingState | None) -> "State | None":
+    def from_rover(charging_state: Optional[ChargingState]) -> Optional["State"]:
         if charging_state == ChargingState.DEACTIVATED:
             return State.OFF
         elif charging_state == ChargingState.BOOST:
@@ -225,10 +225,10 @@ class RoverService(object):
             if value is not None  # Don't update paths that raise an exception (if any)
         }
 
-        if (operation_mode := OperationMode.from_rover(rover.charging_state())) is not None:
+        if (operation_mode := OperationMode.from_rover(try_(rover.charging_state))) is not None:
             updates["/MppOperationMode"] = operation_mode.value
 
-        if (state := State.from_rover(rover.charging_state())) is not None:
+        if (state := State.from_rover(try_(rover.charging_state))) is not None:
             updates["/State"] = state.value
 
         with self._dbusservice as s:
