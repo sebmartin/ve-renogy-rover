@@ -6,10 +6,12 @@ https://github.com/sstoops/dbus-renogy-dcc/blob/main/dbus-renogy-dcc.py
 """
 
 import argparse
+from collections.abc import Callable
 import logging
 import sys
 from enum import IntEnum
 from importlib.metadata import PackageNotFoundError, version
+from typing import Any
 
 from pyrover.renogy_rover import RenogyRoverController as Rover
 from pyrover.types import ChargingState
@@ -193,16 +195,34 @@ class RoverService(object):
     def _update_path_values(self):
         rover = self.rover
 
+        def try_(func: Callable[[], Any]):
+            try:
+                return func()
+            except Exception as e:
+                logging.error(f"Error getting `{func.__name__}` value from rover: {e}")
+                return None
+
+        def solar_power():
+            v = try_(rover.solar_voltage)
+            i = try_(rover.charging_current)
+            if v is None or i is None:
+                return None
+            return v * i
+
         updates = {
-            "/Pv/V": rover.solar_voltage(),
-            "/Pv/I": rover.charging_current(),
-            "/Yield/Power": rover.solar_voltage() * rover.solar_current(),
-            "/Dc/0/Voltage": rover.battery_voltage(),
-            "/Dc/0/Current": rover.charging_current(),
-            "/Link/TemperatureSense": rover.battery_temperature(),
-            "/Link/TemperatureSenseActive": True,
-            "/History/Daily/0/Yield": rover.power_generation_today(),
-            "/History/Daily/0/MaxPower": rover.max_charging_power_today(),
+            path: value
+            for path, value in {
+                "/Pv/V": try_(rover.solar_voltage),
+                "/Pv/I": try_(rover.charging_current),
+                "/Yield/Power": solar_power(),
+                "/Dc/0/Voltage": try_(rover.battery_voltage),
+                "/Dc/0/Current": try_(rover.charging_current),
+                "/Link/TemperatureSense": try_(rover.battery_temperature),
+                "/Link/TemperatureSenseActive": True,
+                "/History/Daily/0/Yield": try_(rover.power_generation_today),
+                "/History/Daily/0/MaxPower": try_(rover.max_charging_power_today),
+            }.items()
+            if value is not None  # Don't update paths that raise an exception (if any)
         }
 
         if (operation_mode := OperationMode.from_rover(rover.charging_state())) is not None:
