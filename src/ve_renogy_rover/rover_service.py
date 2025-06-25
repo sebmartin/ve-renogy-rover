@@ -204,7 +204,7 @@ class RoverService(object):
 
         def solar_power():
             v = try_(rover.solar_voltage)
-            i = try_(rover.charging_current)
+            i = try_(rover.solar_current)
             if v is None or i is None:
                 return None
             return v * i
@@ -213,7 +213,7 @@ class RoverService(object):
             path: value
             for path, value in {
                 "/Pv/V": try_(rover.solar_voltage),
-                "/Pv/I": try_(rover.charging_current),
+                "/Pv/I": try_(rover.solar_current),
                 "/Yield/Power": solar_power(),
                 "/Dc/0/Voltage": try_(rover.battery_voltage),
                 "/Dc/0/Current": try_(rover.charging_current),
