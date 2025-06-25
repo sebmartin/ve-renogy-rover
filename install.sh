@@ -40,7 +40,7 @@ list_devices() {
     pid=$(echo "$info" | grep ^ID_MODEL_ID= | cut -d= -f2)
     model=$(echo "$info" | grep ^ID_MODEL= | cut -d= -f2)
     serial=$(echo "$info" | grep ^ID_SERIAL_SHORT= | cut -d= -f2)
-    echo "$tty - ${vid}:${pid} - $model ($serial)"
+    echo "$tty - ID_MODEL=\"${model}\" [ID_VENDOR_ID=${vid} ID_MODEL_ID=${pid} ID_SERIAL_SHORT=\"${serial})\"]"
   done
 }
 

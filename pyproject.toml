@@ -4,19 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ve-renogy-rover"
-version = "0.1.0"
+version = "0.1.1"
 description = "D-Bus service to integrate Renogy Rover MPPT with Victron Venus OS"
 authors = [{ name = "Seb Martin" }]
 readme = "README.md"
 requires-python = ">=3.8"
-dependencies = [
-    "pyrover @ git+https://github.com/sebmartin/pyrover.git"
-]
+dependencies = ["pyrover @ git+https://github.com/sebmartin/pyrover.git"]
 
 [project.optional-dependencies]
-dev = [
-    "pytest"
-]
+dev = ["pytest"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -6,10 +6,12 @@ https://github.com/sstoops/dbus-renogy-dcc/blob/main/dbus-renogy-dcc.py
 """
 
 import argparse
+from typing import Callable
 import logging
 import sys
 from enum import IntEnum
 from importlib.metadata import PackageNotFoundError, version
+from typing import Any, Optional
 
 from pyrover.renogy_rover import RenogyRoverController as Rover
 from pyrover.types import ChargingState
@@ -27,9 +29,10 @@ try:
 except PackageNotFoundError:
     VERSION = "v0.1.0"
 
-CUSTOM_PRODUCT_ID = 0xF102 # Custom product ID for Renogy Rover MPPT, randomly chosen
+CUSTOM_PRODUCT_ID = 0xF102  # Custom product ID for Renogy Rover MPPT, randomly chosen
 UPDATE_INTERVAL = 3000  # milliseconds
 SETTINGS_PATH = "/data/renogy/rover.json"
+
 
 class OperationMode(IntEnum):
     OFF = 0
@@ -37,7 +40,7 @@ class OperationMode(IntEnum):
     TRACKING = 2
 
     @staticmethod
-    def from_rover(charging_state: ChargingState) -> "OperationMode | None":
+    def from_rover(charging_state: Optional[ChargingState]) -> Optional["OperationMode"]:
         if charging_state == ChargingState.DEACTIVATED:
             return OperationMode.OFF
         elif charging_state == ChargingState.CURRENT_LIMITING:
@@ -45,6 +48,7 @@ class OperationMode(IntEnum):
         elif charging_state == ChargingState.MPPT:
             return OperationMode.TRACKING
         return None
+
 
 class State(IntEnum):
     OFF = 0
@@ -57,7 +61,7 @@ class State(IntEnum):
     EXTERNAL_CONTROL = 252
 
     @staticmethod
-    def from_rover(charging_state: ChargingState) -> "State | None":
+    def from_rover(charging_state: Optional[ChargingState]) -> Optional["State"]:
         if charging_state == ChargingState.DEACTIVATED:
             return State.OFF
         elif charging_state == ChargingState.BOOST:
@@ -67,6 +71,7 @@ class State(IntEnum):
         elif charging_state == ChargingState.EQUALIZING:
             return State.EQUALIZE
         return None
+
 
 class RoverService(object):
     """
@@ -152,7 +157,7 @@ class RoverService(object):
             "/CustomName",
             self.device_info.custom_name,
             writeable=True,
-            onchangecallback=self._on_custom_name_change
+            onchangecallback=self._on_custom_name_change,
         )
         self._dbusservice.add_path("/Serial", self.device_info.serial)
         self._dbusservice.add_path("/FirmwareVersion", self.device_info.firmware_version)
@@ -161,19 +166,23 @@ class RoverService(object):
 
         # https://github.com/victronenergy/venus/wiki/dbus#solar-chargers
         paths = {
+            # Static values
             "/NrOfTrackers": 1,  # Rovers are single tracker devices
+            "/Mode": 1,  # 1=On; 4=Off
+            "/ErrorCode": 0,
+            "/DeviceOffReason": 0,  # Bitmask indicating the reason(s) that the MPPT is in Off State
+            # Dynamic values that will be updated periodically
             "/Pv/V": 0,  # Voltage in Volts, exists only for single tracker devices
             "/Pv/I": 0,  # Current in Amps, exists only for single tracker devices
             "/Yield/Power": 0,  # Power in Watts, total yield power
-            "/MppOperationMode": OperationMode.OFF.value,  # MPPT Tracker deactivated
             "/Dc/0/Voltage": 0,  # Actual battery voltage
             "/Dc/0/Current": 0,  # Actual battery charging current
             "/Link/TemperatureSense": 0,
             "/Link/TemperatureSenseActive": False,
-            "/Mode": 1,   # 1=On; 4=Off
-            "/State": State.OFF.value,   # 1=On; 4=Off
-            "/ErrorCode": 0,
-            "/DeviceOffReason": 0,   # Bitmask indicating the reason(s) that the MPPT is in Off State
+            "/History/Daily/0/Yield": 0,  # Today's yield in kWh
+            "/History/Daily/0/MaxPower": 0,  # Today's max power in Watts
+            "/MppOperationMode": OperationMode.OFF.value,  # MPPT Tracker deactivated
+            "/State": State.OFF.value,  # 1=On; 4=Off
         }
         for path, initial in paths.items():
             self._dbusservice.add_path(path, initial, writeable=False)
@@ -183,23 +192,43 @@ class RoverService(object):
         # Callback to update the values periodically
         GLib.timeout_add(UPDATE_INTERVAL, self._update_path_values)
 
-
     def _update_path_values(self):
         rover = self.rover
+
+        def try_(func: Callable[[], Any]):
+            try:
+                return func()
+            except Exception as e:
+                logging.error(f"Error getting `{func.__name__}` value from rover: {e}")
+                return None
+
+        def solar_power():
+            v = try_(rover.solar_voltage)
+            i = try_(rover.solar_current)
+            if v is None or i is None:
+                return None
+            return v * i
+
         updates = {
-            "/Pv/V":rover.solar_voltage(),
-            "/Pv/I":rover.charging_current(),
-            "/Yield/Power":rover.solar_voltage() * rover.solar_current(),
-            "/Dc/0/Voltage":rover.battery_voltage(),
-            "/Dc/0/Current":rover.charging_current(),
-            "/Link/TemperatureSense": rover.battery_temperature(),
-            "/Link/TemperatureSenseActive": True,
+            path: value
+            for path, value in {
+                "/Pv/V": try_(rover.solar_voltage),
+                "/Pv/I": try_(rover.solar_current),
+                "/Yield/Power": solar_power(),
+                "/Dc/0/Voltage": try_(rover.battery_voltage),
+                "/Dc/0/Current": try_(rover.charging_current),
+                "/Link/TemperatureSense": try_(rover.battery_temperature),
+                "/Link/TemperatureSenseActive": True,
+                "/History/Daily/0/Yield": try_(rover.power_generation_today),
+                "/History/Daily/0/MaxPower": try_(rover.max_charging_power_today),
+            }.items()
+            if value is not None  # Don't update paths that raise an exception (if any)
         }
 
-        if (operation_mode := OperationMode.from_rover(rover.charging_state())) is not None:
+        if (operation_mode := OperationMode.from_rover(try_(rover.charging_state))) is not None:
             updates["/MppOperationMode"] = operation_mode.value
 
-        if (state := State.from_rover(rover.charging_state())) is not None:
+        if (state := State.from_rover(try_(rover.charging_state))) is not None:
             updates["/State"] = state.value
 
         with self._dbusservice as s:
@@ -226,16 +255,16 @@ def main():
     args = parser.parse_args()
 
     log_level = logging.DEBUG if args.debug else logging.INFO
-    logging.basicConfig(
-        level=log_level,
-        format="[%(asctime)s] %(levelname)s: %(message)s"
-    )
+    logging.basicConfig(level=log_level, format="[%(asctime)s] %(levelname)s: %(message)s")
 
     if not args.device:
         logging.error("No device specified. Use --help for usage.")
         sys.exit(1)
 
-    logging.info(f"Starting driver on device: {args.device}")
+    device = args.device.strip()
+    device = device if device.startswith("/") else f"/dev/{device}"
+
+    logging.info(f"Starting driver on device: {device}")
 
     try:
         from dbus.mainloop.glib import DBusGMainLoop
@@ -243,7 +272,7 @@ def main():
         # Have a mainloop, so we can send/receive asynchronous calls to and from dbus
         DBusGMainLoop(set_as_default=True)
 
-        RoverService(tty=args.device)
+        RoverService(tty=device)
         logging.info("Service initialization complete.")
 
         mainloop = GLib.MainLoop()
