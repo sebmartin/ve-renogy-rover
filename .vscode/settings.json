@@ -18,5 +18,7 @@
         "--line-length",
         "120"
     ],
-    "python.analysis.typeCheckingMode": "standard"
+    "python.analysis.typeCheckingMode": "standard",
+    "editor.formatOnSave": true,
+    "black-formatter.importStrategy": "fromEnvironment"
 }
