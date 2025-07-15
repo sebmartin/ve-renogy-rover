@@ -17,11 +17,8 @@ from pyrover.types import ChargingState
 
 from ve_renogy_rover.dbus_service import DbusService
 from ve_renogy_rover.device_info import DeviceInfo
+from ve_renogy_rover.glib_wrapper import timeout_add
 from ve_renogy_rover.ve_dbus_service import create_ve_dbus_service
-
-# Add the paths to some system packages
-sys.path.insert(1, "/usr/lib/python3.8/site-packages")
-from gi.repository import GLib  # type: ignore
 
 try:
     VERSION = version("ve-renogy-rover")  # Replace with your actual package name
@@ -89,11 +86,12 @@ class RoverService(object):
     to the D-Bus system, allowing it to be monitored and controlled via the Victron system.
     """
 
-    def __init__(self, tty: str, dbus_service: DbusService):
+    def __init__(self, tty: str, dbus_service: DbusService, timeout_add_func=None):
         self._tty = tty
         self._device_instance = None
         self._rover = None
         self._dbus_service = dbus_service
+        self._timeout_add = timeout_add_func or timeout_add
 
         self.device_info = DeviceInfo.from_file(SETTINGS_PATH)
 
@@ -177,6 +175,7 @@ class RoverService(object):
             "/Mode": 1,  # 1=On; 4=Off
             "/ErrorCode": 0,
             "/DeviceOffReason": 0,  # Bitmask indicating the reason(s) that the MPPT is in Off State
+            "/Link/TemperatureSenseActive": True,
             # Dynamic values that will be updated periodically
             "/Pv/V": 0,  # Voltage in Volts, exists only for single tracker devices
             "/Pv/I": 0,  # Current in Amps, exists only for single tracker devices
@@ -184,7 +183,6 @@ class RoverService(object):
             "/Dc/0/Voltage": 0,  # Actual battery voltage
             "/Dc/0/Current": 0,  # Actual battery charging current
             "/Link/TemperatureSense": 0,
-            "/Link/TemperatureSenseActive": False,
             "/History/Daily/0/Yield": 0,  # Today's yield in kWh
             "/History/Daily/0/MaxPower": 0,  # Today's max power in Watts
             "/MppOperationMode": OperationMode.OFF.value,  # MPPT Tracker deactivated
@@ -196,14 +194,14 @@ class RoverService(object):
         self._dbus_service.register()
 
         # Callback to update the values periodically
-        GLib.timeout_add(UPDATE_INTERVAL, self._update_path_values)
+        self._timeout_add(UPDATE_INTERVAL, self._update_path_values)
 
     def _update_path_values(self):
         rover = self.rover
 
-        def try_(func: Callable[[], Any]):
+        def try_(func: Callable[[], Any], modifier: Callable[[Any], Any] = lambda x: x):
             try:
-                return func()
+                return modifier(func())
             except Exception as e:
                 logging.error(f"Error getting `{func.__name__}` value from rover: {e}")
                 return None
@@ -220,7 +218,7 @@ class RoverService(object):
             v = try_(rover.battery_voltage)
             if p and v and v > 0:
                 return p / v
-            return 0.0
+            return None
 
         try:
             updates = {
@@ -232,15 +230,17 @@ class RoverService(object):
                     "/Dc/0/Voltage": try_(rover.battery_voltage),
                     "/Dc/0/Current": charging_current(),
                     "/Link/TemperatureSense": try_(rover.battery_temperature),
-                    "/Link/TemperatureSenseActive": True,
-                    "/History/Daily/0/Yield": try_(rover.power_generation_today) or 0.0,
-                    "/History/Daily/0/MaxPower": (try_(rover.max_charging_power_today) or 0.0) / 1000.0,
+                    "/History/Daily/0/Yield": try_(rover.power_generation_today),
+                    "/History/Daily/0/MaxPower": try_(rover.max_charging_power_today, lambda x: x / 1000.0),
                 }.items()
                 if value is not None  # Don't update paths that raise an exception (if any)
             }
 
-            if (operation_mode := OperationMode.from_rover(try_(rover.charging_state))) is not None:
+            charging_state = try_(rover.charging_state)
+            if (operation_mode := OperationMode.from_rover(charging_state)) is not None:
                 updates["/MppOperationMode"] = operation_mode.value
+            else:
+                logging.warning(f"Unknown operation mode for charging state: {charging_state}")
 
             if (state := State.from_rover(try_(rover.charging_state))) is not None:
                 updates["/State"] = state.value
@@ -290,11 +290,17 @@ def main():
         DBusGMainLoop(set_as_default=True)
 
         dbus_service = create_ve_dbus_service(service_name(device))
-        RoverService(tty=device, dbus_service=dbus_service)
+        RoverService(tty=device, dbus_service=dbus_service, timeout_add_func=timeout_add)
         logging.info("Service initialization complete.")
 
-        mainloop = GLib.MainLoop()
-        mainloop.run()
+        try:
+            sys.path.insert(1, "/usr/lib/python3.8/site-packages")
+            from gi.repository import GLib  # type: ignore
+
+            mainloop = GLib.MainLoop()
+            mainloop.run()
+        except ImportError:
+            logging.warning("GLib not available. Cannot run main loop.")
 
     except Exception as e:
         logging.error(f"Driver encountered an error: {e}")

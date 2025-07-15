@@ -1,12 +1,13 @@
+import json
 import logging
 import os
-import json
 from dataclasses import dataclass
 from random import randrange
 
 from pyrover.renogy_rover import RenogyRoverController as Rover
 
 PRODUCT_NAME = "Renogy Rover MPPT"
+
 
 @dataclass
 class DeviceInfo:
@@ -17,7 +18,7 @@ class DeviceInfo:
     hardware_version: str = "0.0.0"
 
     @staticmethod
-    def from_file(path: str) -> 'DeviceInfo':
+    def from_file(path: str) -> "DeviceInfo":
         """Load DeviceInfo from a JSON file."""
         try:
             with open(path, "r") as f:
@@ -26,13 +27,9 @@ class DeviceInfo:
             return DeviceInfo()
 
     @staticmethod
-    def from_dict(data: dict) -> 'DeviceInfo':
+    def from_dict(data: dict) -> "DeviceInfo":
         """Create DeviceInfo from a dictionary."""
-        args = {
-            key: value
-            for key, value in data.items()
-            if key in DeviceInfo.__dataclass_fields__
-        }
+        args = {key: value for key, value in data.items() if key in DeviceInfo.__dataclass_fields__}
         args.setdefault("serial", f"RNG-CTRL-RVR_{randrange(1000, 9999)}")
         return DeviceInfo(**args)
 
