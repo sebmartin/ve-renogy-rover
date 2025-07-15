@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ve-renogy-rover"
-version = "0.1.1"
+version = "0.2.0"
 description = "D-Bus service to integrate Renogy Rover MPPT with Victron Venus OS"
 authors = [{ name = "Seb Martin" }]
 readme = "README.md"
