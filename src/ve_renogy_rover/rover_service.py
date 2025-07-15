@@ -6,23 +6,19 @@ https://github.com/sstoops/dbus-renogy-dcc/blob/main/dbus-renogy-dcc.py
 """
 
 import argparse
-from typing import Callable
 import logging
 import sys
 from enum import IntEnum
 from importlib.metadata import PackageNotFoundError, version
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from pyrover.renogy_rover import RenogyRoverController as Rover
 from pyrover.types import ChargingState
 
+from ve_renogy_rover.dbus_service import DbusService
 from ve_renogy_rover.device_info import DeviceInfo
-
-# Add the paths to some system packages
-sys.path.insert(1, "/usr/lib/python3.8/site-packages")
-sys.path.insert(1, "/opt/victronenergy/dbus-systemcalc-py/ext/velib_python")
-from gi.repository import GLib
-from vedbus import VeDbusService
+from ve_renogy_rover.glib_wrapper import timeout_add
+from ve_renogy_rover.ve_dbus_service import create_ve_dbus_service
 
 try:
     VERSION = version("ve-renogy-rover")  # Replace with your actual package name
@@ -32,6 +28,15 @@ except PackageNotFoundError:
 CUSTOM_PRODUCT_ID = 0xF102  # Custom product ID for Renogy Rover MPPT, randomly chosen
 UPDATE_INTERVAL = 3000  # milliseconds
 SETTINGS_PATH = "/data/renogy/rover.json"
+
+
+def service_name(tty: str) -> str:
+    """
+    Generate a service name based on the tty name.
+    e.g. /dev/ttyUSB0 -> com.victronenergy.solarcharger.ttyUSB0
+    """
+    name = tty.split("/")[-1]
+    return f"com.victronenergy.solarcharger.{name}"
 
 
 class OperationMode(IntEnum):
@@ -81,10 +86,12 @@ class RoverService(object):
     to the D-Bus system, allowing it to be monitored and controlled via the Victron system.
     """
 
-    def __init__(self, tty: str):
+    def __init__(self, tty: str, dbus_service: DbusService, timeout_add_func=None):
         self._tty = tty
         self._device_instance = None
         self._rover = None
+        self._dbus_service = dbus_service
+        self._timeout_add = timeout_add_func or timeout_add
 
         self.device_info = DeviceInfo.from_file(SETTINGS_PATH)
 
@@ -111,8 +118,7 @@ class RoverService(object):
 
     @property
     def service_name(self) -> str:
-        name = self._tty.split("/")[-1]
-        return f"com.victronenergy.solarcharger.{name}"
+        return service_name(self._tty)
 
     @property
     def connection(self) -> str:
@@ -142,27 +148,25 @@ class RoverService(object):
         # Get a few static values from the device
         self.device_info.update_from_device(self.rover)
 
-        self._dbusservice = VeDbusService(self.service_name, register=False)
-
         # Create the management objects, as specified in the ccgx dbus-api document
-        self._dbusservice.add_path("/Mgmt/ProcessName", __file__)
-        self._dbusservice.add_path("/Mgmt/ProcessVersion", VERSION)
-        self._dbusservice.add_path("/Mgmt/Connection", self.connection)
+        self._dbus_service.add_path("/Mgmt/ProcessName", __file__)
+        self._dbus_service.add_path("/Mgmt/ProcessVersion", VERSION)
+        self._dbus_service.add_path("/Mgmt/Connection", self.connection)
 
         # Create the mandatory objects
-        self._dbusservice.add_path("/DeviceInstance", self.device_instance)
-        self._dbusservice.add_path("/ProductId", CUSTOM_PRODUCT_ID)
-        self._dbusservice.add_path("/ProductName", self.device_info.product_name)
-        self._dbusservice.add_path(
+        self._dbus_service.add_path("/DeviceInstance", self.device_instance)
+        self._dbus_service.add_path("/ProductId", CUSTOM_PRODUCT_ID)
+        self._dbus_service.add_path("/ProductName", self.device_info.product_name)
+        self._dbus_service.add_path(
             "/CustomName",
             self.device_info.custom_name,
             writeable=True,
             onchangecallback=self._on_custom_name_change,
         )
-        self._dbusservice.add_path("/Serial", self.device_info.serial)
-        self._dbusservice.add_path("/FirmwareVersion", self.device_info.firmware_version)
-        self._dbusservice.add_path("/HardwareVersion", self.device_info.hardware_version)
-        self._dbusservice.add_path("/Connected", 1)
+        self._dbus_service.add_path("/Serial", self.device_info.serial)
+        self._dbus_service.add_path("/FirmwareVersion", self.device_info.firmware_version)
+        self._dbus_service.add_path("/HardwareVersion", self.device_info.hardware_version)
+        self._dbus_service.add_path("/Connected", 1)
 
         # https://github.com/victronenergy/venus/wiki/dbus#solar-chargers
         paths = {
@@ -171,6 +175,7 @@ class RoverService(object):
             "/Mode": 1,  # 1=On; 4=Off
             "/ErrorCode": 0,
             "/DeviceOffReason": 0,  # Bitmask indicating the reason(s) that the MPPT is in Off State
+            "/Link/TemperatureSenseActive": True,
             # Dynamic values that will be updated periodically
             "/Pv/V": 0,  # Voltage in Volts, exists only for single tracker devices
             "/Pv/I": 0,  # Current in Amps, exists only for single tracker devices
@@ -178,60 +183,72 @@ class RoverService(object):
             "/Dc/0/Voltage": 0,  # Actual battery voltage
             "/Dc/0/Current": 0,  # Actual battery charging current
             "/Link/TemperatureSense": 0,
-            "/Link/TemperatureSenseActive": False,
             "/History/Daily/0/Yield": 0,  # Today's yield in kWh
             "/History/Daily/0/MaxPower": 0,  # Today's max power in Watts
             "/MppOperationMode": OperationMode.OFF.value,  # MPPT Tracker deactivated
             "/State": State.OFF.value,  # 1=On; 4=Off
         }
         for path, initial in paths.items():
-            self._dbusservice.add_path(path, initial, writeable=False)
+            self._dbus_service.add_path(path, initial, writeable=False)
 
-        self._dbusservice.register()
+        self._dbus_service.register()
 
         # Callback to update the values periodically
-        GLib.timeout_add(UPDATE_INTERVAL, self._update_path_values)
+        self._timeout_add(UPDATE_INTERVAL, self._update_path_values)
 
     def _update_path_values(self):
         rover = self.rover
 
-        def try_(func: Callable[[], Any]):
+        def try_(func: Callable[[], Any], modifier: Callable[[Any], Any] = lambda x: x):
             try:
-                return func()
+                return modifier(func())
             except Exception as e:
                 logging.error(f"Error getting `{func.__name__}` value from rover: {e}")
                 return None
 
         def solar_power():
             v = try_(rover.solar_voltage)
-            i = try_(rover.solar_current)
+            i = try_(rover.charging_current)
             if v is None or i is None:
                 return None
             return v * i
 
-        updates = {
-            path: value
-            for path, value in {
-                "/Pv/V": try_(rover.solar_voltage),
-                "/Pv/I": try_(rover.solar_current),
-                "/Yield/Power": solar_power(),
-                "/Dc/0/Voltage": try_(rover.battery_voltage),
-                "/Dc/0/Current": try_(rover.charging_current),
-                "/Link/TemperatureSense": try_(rover.battery_temperature),
-                "/Link/TemperatureSenseActive": True,
-                "/History/Daily/0/Yield": try_(rover.power_generation_today),
-                "/History/Daily/0/MaxPower": try_(rover.max_charging_power_today),
-            }.items()
-            if value is not None  # Don't update paths that raise an exception (if any)
-        }
+        def charging_current():
+            p = try_(rover.charging_power)
+            v = try_(rover.battery_voltage)
+            if p and v and v > 0:
+                return p / v
+            return None
 
-        if (operation_mode := OperationMode.from_rover(try_(rover.charging_state))) is not None:
-            updates["/MppOperationMode"] = operation_mode.value
+        try:
+            updates = {
+                path: value
+                for path, value in {
+                    "/Pv/V": try_(rover.solar_voltage),
+                    "/Pv/I": try_(rover.charging_current),
+                    "/Yield/Power": solar_power(),
+                    "/Dc/0/Voltage": try_(rover.battery_voltage),
+                    "/Dc/0/Current": charging_current(),
+                    "/Link/TemperatureSense": try_(rover.battery_temperature),
+                    "/History/Daily/0/Yield": try_(rover.power_generation_today),
+                    "/History/Daily/0/MaxPower": try_(rover.max_charging_power_today, lambda x: x / 1000.0),
+                }.items()
+                if value is not None  # Don't update paths that raise an exception (if any)
+            }
 
-        if (state := State.from_rover(try_(rover.charging_state))) is not None:
-            updates["/State"] = state.value
+            charging_state = try_(rover.charging_state)
+            if (operation_mode := OperationMode.from_rover(charging_state)) is not None:
+                updates["/MppOperationMode"] = operation_mode.value
+            else:
+                logging.warning(f"Unknown operation mode for charging state: {charging_state}")
 
-        with self._dbusservice as s:
+            if (state := State.from_rover(try_(rover.charging_state))) is not None:
+                updates["/State"] = state.value
+        except Exception as e:
+            logging.exception(f"Error updating path values: {e}")
+            return True
+
+        with self._dbus_service as s:
             for path, value in updates.items():
                 s[path] = value
                 logging.debug(f"{path}: {s[path]}")
@@ -267,16 +284,23 @@ def main():
     logging.info(f"Starting driver on device: {device}")
 
     try:
-        from dbus.mainloop.glib import DBusGMainLoop
+        from dbus.mainloop.glib import DBusGMainLoop  # type: ignore
 
         # Have a mainloop, so we can send/receive asynchronous calls to and from dbus
         DBusGMainLoop(set_as_default=True)
 
-        RoverService(tty=device)
+        dbus_service = create_ve_dbus_service(service_name(device))
+        RoverService(tty=device, dbus_service=dbus_service, timeout_add_func=timeout_add)
         logging.info("Service initialization complete.")
 
-        mainloop = GLib.MainLoop()
-        mainloop.run()
+        try:
+            sys.path.insert(1, "/usr/lib/python3.8/site-packages")
+            from gi.repository import GLib  # type: ignore
+
+            mainloop = GLib.MainLoop()
+            mainloop.run()
+        except ImportError:
+            logging.warning("GLib not available. Cannot run main loop.")
 
     except Exception as e:
         logging.error(f"Driver encountered an error: {e}")
