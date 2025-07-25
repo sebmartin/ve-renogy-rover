@@ -46,11 +46,13 @@ class OperationMode(IntEnum):
 
     @staticmethod
     def from_rover(charging_state: Optional[ChargingState]) -> Optional["OperationMode"]:
+        if charging_state is None:
+            return None
         if charging_state == ChargingState.DEACTIVATED:
             return OperationMode.OFF
-        elif charging_state == ChargingState.CURRENT_LIMITING:
+        elif charging_state & ChargingState.CURRENT_LIMITING == ChargingState.CURRENT_LIMITING:
             return OperationMode.LIMITING
-        elif charging_state == ChargingState.MPPT:
+        elif charging_state & ChargingState.MPPT == ChargingState.MPPT:
             return OperationMode.TRACKING
         return None
 
@@ -67,13 +69,15 @@ class State(IntEnum):
 
     @staticmethod
     def from_rover(charging_state: Optional[ChargingState]) -> Optional["State"]:
+        if charging_state is None:
+            return None
         if charging_state == ChargingState.DEACTIVATED:
             return State.OFF
-        elif charging_state == ChargingState.BOOST:
-            return State.BULK
-        elif charging_state == ChargingState.FLOATING:
+        elif charging_state & ChargingState.FLOATING == ChargingState.FLOATING:
             return State.FLOAT
-        elif charging_state == ChargingState.EQUALIZING:
+        elif charging_state & ChargingState.BOOST == ChargingState.BOOST:
+            return State.BULK
+        elif charging_state & ChargingState.EQUALIZING == ChargingState.EQUALIZING:
             return State.EQUALIZE
         return None
 
@@ -185,6 +189,8 @@ class RoverService(object):
             "/Link/TemperatureSense": 0,
             "/History/Daily/0/Yield": 0,  # Today's yield in kWh
             "/History/Daily/0/MaxPower": 0,  # Today's max power in Watts
+            "/History/Daily/0/Pv/0/Yield": 0,  # Today's yield in kWh
+            "/History/Daily/0/Pv/0/MaxPower": 0,  # Today's max power in Watts
             "/MppOperationMode": OperationMode.OFF.value,  # MPPT Tracker deactivated
             "/State": State.OFF.value,  # 1=On; 4=Off
         }
@@ -232,6 +238,8 @@ class RoverService(object):
                     "/Link/TemperatureSense": try_(rover.battery_temperature),
                     "/History/Daily/0/Yield": try_(rover.power_generation_today),
                     "/History/Daily/0/MaxPower": try_(rover.max_charging_power_today, lambda x: x / 1000.0),
+                    "/History/Daily/0/Pv/0/Yield": try_(rover.power_generation_today),
+                    "/History/Daily/0/Pv/0/MaxPower": try_(rover.max_charging_power_today, lambda x: x / 1000.0),
                 }.items()
                 if value is not None  # Don't update paths that raise an exception (if any)
             }

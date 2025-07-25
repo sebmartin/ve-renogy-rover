@@ -226,6 +226,8 @@ class TestRoverService:
             "/Link/TemperatureSenseActive": True,
             "/History/Daily/0/Yield": 0,
             "/History/Daily/0/MaxPower": 0,
+            "/History/Daily/0/Pv/0/Yield": 0,
+            "/History/Daily/0/Pv/0/MaxPower": 0,
             "/MppOperationMode": 0,
             "/State": 0,
         }
@@ -260,6 +262,8 @@ class TestRoverService:
             "/Link/TemperatureSense": 25.0,
             "/History/Daily/0/Yield": 1.2,
             "/History/Daily/0/MaxPower": 50.0,  # max_charging_power_today / 1000
+            "/History/Daily/0/Pv/0/Yield": 1.2,
+            "/History/Daily/0/Pv/0/MaxPower": 50.0,  # max_charging_power_today / 1000
             "/MppOperationMode": OperationMode.TRACKING.value,
             # Note: /State is not updated because ChargingState.MPPT doesn't map to any State enum value
         }
