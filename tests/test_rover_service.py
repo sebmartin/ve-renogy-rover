@@ -258,7 +258,7 @@ class TestRoverService:
             "/Pv/I": 2.1,
             "/Yield/Power": 24.5 * 2.1,  # solar_voltage * charging_current
             "/Dc/0/Voltage": 12.8,
-            "/Dc/0/Current": 50.0 / 12.8,  # charging_power / battery_voltage
+            "/Dc/0/Current": 2.1,
             "/Link/TemperatureSense": 25.0,
             "/History/Daily/0/Yield": 1.2,
             "/History/Daily/0/MaxPower": 50.0,  # max_charging_power_today / 1000

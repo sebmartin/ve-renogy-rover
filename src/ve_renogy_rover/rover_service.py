@@ -219,11 +219,11 @@ class RoverService(object):
                 return None
             return v * i
 
-        def charging_current():
+        def charging_voltage():
             p = try_(rover.charging_power)
-            v = try_(rover.battery_voltage)
-            if p and v and v > 0:
-                return p / v
+            i = try_(rover.charging_current)
+            if p and i and i > 0:
+                return p / i
             return None
 
         try:
@@ -234,7 +234,7 @@ class RoverService(object):
                     "/Pv/I": try_(rover.charging_current),
                     "/Yield/Power": solar_power(),
                     "/Dc/0/Voltage": try_(rover.battery_voltage),
-                    "/Dc/0/Current": charging_current(),
+                    "/Dc/0/Current": try_(rover.charging_current),
                     "/Link/TemperatureSense": try_(rover.battery_temperature),
                     "/History/Daily/0/Yield": try_(rover.power_generation_today),
                     "/History/Daily/0/MaxPower": try_(rover.max_charging_power_today, lambda x: x / 1000.0),
