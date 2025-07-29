@@ -99,17 +99,20 @@ class TestState:
     @pytest.mark.parametrize(
         "charging_state,expected",
         [
+            (None, None),
             (ChargingState.DEACTIVATED, State.OFF),
-            (ChargingState.BOOST, State.BULK),
+            (ChargingState.ACTIVATED, State.BULK),
+            (ChargingState.MPPT, State.BULK),
+            (ChargingState.BOOST, State.ABSORPTION),
             (ChargingState.FLOATING, State.FLOAT),
             (ChargingState.EQUALIZING, State.EQUALIZE),
-            (None, None),
-            (ChargingState.MPPT, None),
+            (ChargingState.CURRENT_LIMITING, State.BULK),
+            (ChargingState(0xFF), State.OFF),
         ],
     )
     def test_from_rover(self, charging_state, expected):
         result = State.from_rover(charging_state)
-        assert result == expected
+        assert result is expected
 
 
 class TestRoverService:
@@ -226,6 +229,8 @@ class TestRoverService:
             "/Link/TemperatureSenseActive": True,
             "/History/Daily/0/Yield": 0,
             "/History/Daily/0/MaxPower": 0,
+            "/History/Daily/0/Pv/0/Yield": 0,
+            "/History/Daily/0/Pv/0/MaxPower": 0,
             "/MppOperationMode": 0,
             "/State": 0,
         }
@@ -256,12 +261,14 @@ class TestRoverService:
             "/Pv/I": 2.1,
             "/Yield/Power": 24.5 * 2.1,  # solar_voltage * charging_current
             "/Dc/0/Voltage": 12.8,
-            "/Dc/0/Current": 50.0 / 12.8,  # charging_power / battery_voltage
+            "/Dc/0/Current": 2.1,
             "/Link/TemperatureSense": 25.0,
             "/History/Daily/0/Yield": 1.2,
             "/History/Daily/0/MaxPower": 50.0,  # max_charging_power_today / 1000
+            "/History/Daily/0/Pv/0/Yield": 1.2,
+            "/History/Daily/0/Pv/0/MaxPower": 50.0,  # max_charging_power_today / 1000
             "/MppOperationMode": OperationMode.TRACKING.value,
-            # Note: /State is not updated because ChargingState.MPPT doesn't map to any State enum value
+            "/State": State.BULK.value,
         }
 
     def test_update_path_values_with_exceptions(self, rover_service, mock_rover):

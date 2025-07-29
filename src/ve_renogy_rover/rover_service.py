@@ -46,11 +46,13 @@ class OperationMode(IntEnum):
 
     @staticmethod
     def from_rover(charging_state: Optional[ChargingState]) -> Optional["OperationMode"]:
+        if charging_state is None:
+            return None
         if charging_state == ChargingState.DEACTIVATED:
             return OperationMode.OFF
-        elif charging_state == ChargingState.CURRENT_LIMITING:
+        elif charging_state & ChargingState.CURRENT_LIMITING == ChargingState.CURRENT_LIMITING:
             return OperationMode.LIMITING
-        elif charging_state == ChargingState.MPPT:
+        elif charging_state & ChargingState.MPPT == ChargingState.MPPT:
             return OperationMode.TRACKING
         return None
 
@@ -67,15 +69,26 @@ class State(IntEnum):
 
     @staticmethod
     def from_rover(charging_state: Optional[ChargingState]) -> Optional["State"]:
+        if charging_state is None:
+            return None
+
         if charging_state == ChargingState.DEACTIVATED:
             return State.OFF
-        elif charging_state == ChargingState.BOOST:
+        elif charging_state == ChargingState.ACTIVATED:
+            return State.BULK  # Generic "charger on"
+        elif charging_state == ChargingState.MPPT:
             return State.BULK
+        elif charging_state == ChargingState.BOOST:
+            return State.ABSORPTION
         elif charging_state == ChargingState.FLOATING:
             return State.FLOAT
         elif charging_state == ChargingState.EQUALIZING:
             return State.EQUALIZE
-        return None
+        elif charging_state == ChargingState.CURRENT_LIMITING:
+            return State.BULK
+        else:
+            return State.OFF  # Fallback for unknown values
+
 
 
 class RoverService(object):
@@ -185,6 +198,8 @@ class RoverService(object):
             "/Link/TemperatureSense": 0,
             "/History/Daily/0/Yield": 0,  # Today's yield in kWh
             "/History/Daily/0/MaxPower": 0,  # Today's max power in Watts
+            "/History/Daily/0/Pv/0/Yield": 0,  # Today's yield in kWh
+            "/History/Daily/0/Pv/0/MaxPower": 0,  # Today's max power in Watts
             "/MppOperationMode": OperationMode.OFF.value,  # MPPT Tracker deactivated
             "/State": State.OFF.value,  # 1=On; 4=Off
         }
@@ -213,11 +228,11 @@ class RoverService(object):
                 return None
             return v * i
 
-        def charging_current():
+        def charging_voltage():
             p = try_(rover.charging_power)
-            v = try_(rover.battery_voltage)
-            if p and v and v > 0:
-                return p / v
+            i = try_(rover.charging_current)
+            if p and i and i > 0:
+                return p / i
             return None
 
         try:
@@ -228,10 +243,12 @@ class RoverService(object):
                     "/Pv/I": try_(rover.charging_current),
                     "/Yield/Power": solar_power(),
                     "/Dc/0/Voltage": try_(rover.battery_voltage),
-                    "/Dc/0/Current": charging_current(),
+                    "/Dc/0/Current": try_(rover.charging_current),
                     "/Link/TemperatureSense": try_(rover.battery_temperature),
                     "/History/Daily/0/Yield": try_(rover.power_generation_today),
                     "/History/Daily/0/MaxPower": try_(rover.max_charging_power_today, lambda x: x / 1000.0),
+                    "/History/Daily/0/Pv/0/Yield": try_(rover.power_generation_today),
+                    "/History/Daily/0/Pv/0/MaxPower": try_(rover.max_charging_power_today, lambda x: x / 1000.0),
                 }.items()
                 if value is not None  # Don't update paths that raise an exception (if any)
             }
