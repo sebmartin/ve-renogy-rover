@@ -45,7 +45,7 @@ def mock_rover():
     rover.battery_voltage = Mock(return_value=12.8, __name__="battery_voltage")
     rover.battery_temperature = Mock(return_value=25.0, __name__="battery_temperature")
     rover.power_generation_today = Mock(return_value=1.2, __name__="power_generation_today")
-    rover.max_charging_power_today = Mock(return_value=50000, __name__="max_charging_power_today")  # 50W in mW
+    rover.max_charging_power_today = Mock(return_value=500, __name__="max_charging_power_today")  # 50W in mW
     rover.charging_state = Mock(return_value=ChargingState.MPPT, __name__="charging_state")
     rover.product_model = Mock(return_value="RNG-CTRL-RVR", __name__="product_model")
     rover.serial_number = Mock(return_value="12345", __name__="serial_number")

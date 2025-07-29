@@ -264,9 +264,9 @@ class TestRoverService:
             "/Dc/0/Current": 2.1,
             "/Link/TemperatureSense": 25.0,
             "/History/Daily/0/Yield": 1.2,
-            "/History/Daily/0/MaxPower": 50.0,  # max_charging_power_today / 1000
+            "/History/Daily/0/MaxPower": 500.0,
             "/History/Daily/0/Pv/0/Yield": 1.2,
-            "/History/Daily/0/Pv/0/MaxPower": 50.0,  # max_charging_power_today / 1000
+            "/History/Daily/0/Pv/0/MaxPower": 500.0,
             "/MppOperationMode": OperationMode.TRACKING.value,
             "/State": State.BULK.value,
         }
