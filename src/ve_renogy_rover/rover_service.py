@@ -246,9 +246,9 @@ class RoverService(object):
                     "/Dc/0/Current": try_(rover.charging_current),
                     "/Link/TemperatureSense": try_(rover.battery_temperature),
                     "/History/Daily/0/Yield": try_(rover.power_generation_today),
-                    "/History/Daily/0/MaxPower": try_(rover.max_charging_power_today, lambda x: x / 1000.0),
+                    "/History/Daily/0/MaxPower": try_(rover.max_charging_power_today),
                     "/History/Daily/0/Pv/0/Yield": try_(rover.power_generation_today),
-                    "/History/Daily/0/Pv/0/MaxPower": try_(rover.max_charging_power_today, lambda x: x / 1000.0),
+                    "/History/Daily/0/Pv/0/MaxPower": try_(rover.max_charging_power_today),
                 }.items()
                 if value is not None  # Don't update paths that raise an exception (if any)
             }
