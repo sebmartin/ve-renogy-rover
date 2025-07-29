@@ -99,17 +99,20 @@ class TestState:
     @pytest.mark.parametrize(
         "charging_state,expected",
         [
+            (None, None),
             (ChargingState.DEACTIVATED, State.OFF),
-            (ChargingState.BOOST, State.BULK),
+            (ChargingState.ACTIVATED, State.BULK),
+            (ChargingState.MPPT, State.BULK),
+            (ChargingState.BOOST, State.ABSORPTION),
             (ChargingState.FLOATING, State.FLOAT),
             (ChargingState.EQUALIZING, State.EQUALIZE),
-            (None, None),
-            (ChargingState.MPPT, None),
+            (ChargingState.CURRENT_LIMITING, State.BULK),
+            (ChargingState(0xFF), State.OFF),
         ],
     )
     def test_from_rover(self, charging_state, expected):
         result = State.from_rover(charging_state)
-        assert result == expected
+        assert result is expected
 
 
 class TestRoverService:
@@ -265,7 +268,7 @@ class TestRoverService:
             "/History/Daily/0/Pv/0/Yield": 1.2,
             "/History/Daily/0/Pv/0/MaxPower": 50.0,  # max_charging_power_today / 1000
             "/MppOperationMode": OperationMode.TRACKING.value,
-            # Note: /State is not updated because ChargingState.MPPT doesn't map to any State enum value
+            "/State": State.BULK.value,
         }
 
     def test_update_path_values_with_exceptions(self, rover_service, mock_rover):

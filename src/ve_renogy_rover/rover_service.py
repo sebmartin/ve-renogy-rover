@@ -71,15 +71,24 @@ class State(IntEnum):
     def from_rover(charging_state: Optional[ChargingState]) -> Optional["State"]:
         if charging_state is None:
             return None
+
         if charging_state == ChargingState.DEACTIVATED:
             return State.OFF
-        elif charging_state & ChargingState.FLOATING == ChargingState.FLOATING:
-            return State.FLOAT
-        elif charging_state & ChargingState.BOOST == ChargingState.BOOST:
+        elif charging_state == ChargingState.ACTIVATED:
+            return State.BULK  # Generic "charger on"
+        elif charging_state == ChargingState.MPPT:
             return State.BULK
-        elif charging_state & ChargingState.EQUALIZING == ChargingState.EQUALIZING:
+        elif charging_state == ChargingState.BOOST:
+            return State.ABSORPTION
+        elif charging_state == ChargingState.FLOATING:
+            return State.FLOAT
+        elif charging_state == ChargingState.EQUALIZING:
             return State.EQUALIZE
-        return None
+        elif charging_state == ChargingState.CURRENT_LIMITING:
+            return State.BULK
+        else:
+            return State.OFF  # Fallback for unknown values
+
 
 
 class RoverService(object):

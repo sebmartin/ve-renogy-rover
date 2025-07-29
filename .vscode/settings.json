@@ -22,10 +22,4 @@
     "python.analysis.typeCheckingMode": "standard",
     "editor.formatOnSave": true,
     "black-formatter.importStrategy": "fromEnvironment",
-    "python.languageServer": "None",
-    "cursorpyright.analysis.extraPaths": [
-        "/usr/lib/python3.8/site-packages",
-        "/opt/victronenergy/dbus-systemcalc-py/ext/velib_python"
-    ],
-    "cursorpyright.analysis.typeCheckingMode": "standard"
 }
