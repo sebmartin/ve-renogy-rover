@@ -39,18 +39,19 @@ def mock_rover():
     rover = Mock(spec=RenogyRoverController)
 
     # Mock all the rover methods that return values
-    rover.solar_voltage = Mock(return_value=24.5, __name__="solar_voltage")
-    rover.charging_current = Mock(return_value=2.1, __name__="charging_current")
-    rover.charging_power = Mock(return_value=50.0, __name__="charging_power")
-    rover.battery_voltage = Mock(return_value=12.8, __name__="battery_voltage")
-    rover.battery_temperature = Mock(return_value=25.0, __name__="battery_temperature")
-    rover.power_generation_today = Mock(return_value=1.2, __name__="power_generation_today")
-    rover.max_charging_power_today = Mock(return_value=500, __name__="max_charging_power_today")  # 50W in mW
-    rover.charging_state = Mock(return_value=ChargingState.MPPT, __name__="charging_state")
-    rover.product_model = Mock(return_value="RNG-CTRL-RVR", __name__="product_model")
-    rover.serial_number = Mock(return_value="12345", __name__="serial_number")
-    rover.software_version = Mock(return_value="1.0.0", __name__="software_version")
-    rover.hardware_version = Mock(return_value="1.0.0", __name__="hardware_version")
+    rover.solar_voltage.return_value = 24.5
+    rover.solar_current.return_value = 2.1
+    rover.charging_current.return_value = 2.1
+    rover.charging_power.return_value = 50.0
+    rover.battery_voltage.return_value = 12.8
+    rover.battery_temperature.return_value = 25.0
+    rover.power_generation_today.return_value = 1.2
+    rover.max_charging_power_today.return_value = 500  # 50W in mW
+    rover.charging_state.return_value = ChargingState.MPPT
+    rover.product_model.return_value = "RNG-CTRL-RVR"
+    rover.serial_number.return_value = "12345"
+    rover.software_version.return_value = "1.0.0"
+    rover.hardware_version.return_value = "1.0.0"
 
     return rover
 

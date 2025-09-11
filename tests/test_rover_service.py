@@ -4,7 +4,7 @@
 Tests for the rover_service module.
 """
 
-from unittest.mock import ANY, Mock, call, patch
+from unittest.mock import Mock, patch
 
 import pytest
 from pyrover.types import ChargingState
@@ -255,7 +255,7 @@ class TestRoverService:
 
         # Verify that values were set in the context
         context = rover_service._dbus_service.__enter__.return_value
-        update_calls = {call[0][0]: call[0][1] for call in context.__setitem__.call_args_list}
+        update_calls = {c[0][0]: c[0][1] for c in context.__setitem__.call_args_list}
         assert update_calls == {
             "/Pv/V": 24.5,
             "/Pv/I": 2.1,
@@ -274,6 +274,7 @@ class TestRoverService:
     def test_update_path_values_with_exceptions(self, rover_service, mock_rover):
         # Update only the properties that need to change for this test
         mock_rover.solar_voltage.side_effect = Exception("Connection error")
+        mock_rover.solar_current.side_effect = Exception("Connection error")
         mock_rover.charging_current.side_effect = Exception("Connection error")
         mock_rover.charging_power.side_effect = Exception("Connection error")
         mock_rover.battery_voltage.side_effect = Exception("Connection error")
@@ -281,7 +282,6 @@ class TestRoverService:
         mock_rover.charging_state.side_effect = Exception("Connection error")
         mock_rover.max_charging_power_today.side_effect = Exception("Connection error")
         mock_rover.power_generation_today.side_effect = Exception("Connection error")
-        mock_rover.max_charging_power_today.side_effect = Exception("Connection error")
 
         rover_service._rover = mock_rover
 
@@ -292,7 +292,7 @@ class TestRoverService:
 
         # There should be no updates when there are exceptions
         context = rover_service._dbus_service.__enter__.return_value
-        update_calls = {call[0][0]: call[0][1] for call in context.__setitem__.call_args_list}
+        update_calls = {c[0][0]: c[0][1] for c in context.__setitem__.call_args_list}
         assert update_calls == {}
 
     def test_on_custom_name_change(self, rover_service):
