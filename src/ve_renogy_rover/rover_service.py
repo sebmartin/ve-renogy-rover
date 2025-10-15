@@ -193,6 +193,8 @@ class RoverService(object):
             "/Pv/V": 0,  # Voltage in Volts, exists only for single tracker devices
             "/Pv/I": 0,  # Current in Amps, exists only for single tracker devices
             "/Yield/Power": 0,  # Power in Watts, total yield power
+            "/Yield/User": 0,  # Total energy produced (kWh), user-resettable
+            "/Yield/System": 0,  # Total energy produced (kWh), non-resettable
             "/Dc/0/Voltage": 0,  # Actual battery voltage
             "/Dc/0/Current": 0,  # Actual battery charging current
             "/Link/TemperatureSense": 0,
@@ -221,27 +223,15 @@ class RoverService(object):
                 logging.error(f"Error getting `{func.__name__}` value from rover: {e}")
                 return None
 
-        def solar_power():
-            v = try_(rover.solar_voltage)
-            i = try_(rover.solar_current)
-            if v is None or i is None:
-                return None
-            return v * i
-
-        def charging_voltage():
-            p = try_(rover.charging_power)
-            i = try_(rover.charging_current)
-            if p and i and i > 0:
-                return p / i
-            return None
-
         try:
             updates = {
                 path: value
                 for path, value in {
                     "/Pv/V": try_(rover.solar_voltage),
                     "/Pv/I": try_(rover.solar_current),
-                    "/Yield/Power": solar_power(),
+                    "/Yield/Power": try_(rover.charging_power),
+                    "/Yield/User": try_(rover.cumulative_power_generation),
+                    "/Yield/System": try_(rover.cumulative_power_generation),
                     "/Dc/0/Voltage": try_(rover.battery_voltage),
                     "/Dc/0/Current": try_(rover.charging_current),
                     "/Link/TemperatureSense": try_(rover.battery_temperature),

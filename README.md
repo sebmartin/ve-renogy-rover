@@ -67,6 +67,8 @@ The driver exposes data under `com.victronenergy.solarcharger.ttyUSBx`:
 - `/Pv/V` - Solar panel voltage (V)
 - `/Pv/I` - Solar panel current (A)
 - `/Yield/Power` - Total power output (W)
+- `/Yield/User` - Total energy produced (kWh), user-resettable
+- `/Yield/System` - Total energy produced (kWh), non-resettable
 - `/Dc/0/Voltage` - Battery voltage (V)
 - `/Dc/0/Current` - Battery charging current (A)
 - `/History/Daily/0/Yield` - Today's energy yield (kWh)
