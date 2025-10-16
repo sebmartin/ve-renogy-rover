@@ -52,6 +52,7 @@ def mock_rover():
     rover.serial_number.return_value = "12345"
     rover.software_version.return_value = "1.0.0"
     rover.hardware_version.return_value = "1.0.0"
+    rover.cumulative_power_generation.return_value = 1.1 # kWh
 
     return rover
 

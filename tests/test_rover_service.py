@@ -223,6 +223,8 @@ class TestRoverService:
             "/Pv/V": 0,
             "/Pv/I": 0,
             "/Yield/Power": 0,
+            "/Yield/User": 0,
+            "/Yield/System": 0,
             "/Dc/0/Voltage": 0,
             "/Dc/0/Current": 0,
             "/Link/TemperatureSense": 0,
@@ -259,14 +261,16 @@ class TestRoverService:
         assert update_calls == {
             "/Pv/V": 24.5,
             "/Pv/I": 2.1,
-            "/Yield/Power": 24.5 * 2.1,  # solar_voltage * charging_current
+            "/Yield/Power": 50.0,
+            "/Yield/User": 1.1,
+            "/Yield/System": 1.1,
             "/Dc/0/Voltage": 12.8,
             "/Dc/0/Current": 2.1,
             "/Link/TemperatureSense": 25.0,
             "/History/Daily/0/Yield": 1.2,
-            "/History/Daily/0/MaxPower": 500.0,
+            "/History/Daily/0/MaxPower": 500,
             "/History/Daily/0/Pv/0/Yield": 1.2,
-            "/History/Daily/0/Pv/0/MaxPower": 500.0,
+            "/History/Daily/0/Pv/0/MaxPower": 500,
             "/MppOperationMode": OperationMode.TRACKING.value,
             "/State": State.BULK.value,
         }
