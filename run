@@ -3,4 +3,4 @@
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_FILE="$SCRIPT_DIR/driver.log"
 
-python3 -m ve_renogy_rover.main "$@" 2>> "$LOG_FILE"
+python3 -m ve_renogy_rover.rover_service "$@" 2>> "$LOG_FILE"
