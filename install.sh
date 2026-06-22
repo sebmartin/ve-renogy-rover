@@ -5,7 +5,7 @@ DRIVER_NAME="ve_renogy_rover"
 DEVICE_CLASS="renogy_rover"
 DRIVER_SYMLINK="/opt/victronenergy/dbus.${DRIVER_NAME}"
 
-DEFAULT_USB_IDS=("067b:2303")  # Override with --usb-id
+DEFAULT_USB_IDS=("067b:2303" "067b:23a3")  # Override with --usb-id
 USB_IDS=("${DEFAULT_USB_IDS[@]}")
 
 CONF_DIR="/data/conf/serial-starter.d"
