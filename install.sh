@@ -3,7 +3,7 @@ set -e
 
 DRIVER_NAME="ve_renogy_rover"
 DEVICE_CLASS="renogy_rover"
-DRIVER_SYMLINK="/opt/victronenergy/dbus.${DRIVER_NAME}"
+DRIVER_SYMLINK="/opt/victronenergy/service-templates/dbus.${DRIVER_NAME}"
 
 DEFAULT_USB_IDS=("067b:2303" "067b:23a3")  # Override with --usb-id
 USB_IDS=("${DEFAULT_USB_IDS[@]}")
@@ -63,9 +63,8 @@ install_driver() {
 
   run pip3 install .
 
-  run mkdir -p /opt/victronenergy
-  run ln -sf "$DRIVER_DIR" "$DRIVER_SYMLINK"
-  run chmod +x "$DRIVER_DIR/run"
+  run mkdir -p /opt/victronenergy/service-templates
+  run ln -sf "$DRIVER_DIR/service-template" "$DRIVER_SYMLINK"
 
   run mkdir -p "$CONF_DIR"
   {
@@ -76,7 +75,7 @@ install_driver() {
     vendor="${id%%:*}"
     product="${id##*:}"
     # ACTION=="add", ENV{ID_BUS}=="usb", ENV{ID_MODEL}=="USB-Serial_Controller", ENV{VE_SERVICE}="ignore"
-    rule="SUBSYSTEM==\"tty\", ATTRS{ID_VENDOR_ID}==\"$vendor\", ATTRS{ID_MODEL_ID}==\"$product\", ENV{VE_DEVICE_CLASS}=\"${DEVICE_CLASS}\""
+    rule="ACTION==\"add\", ENV{ID_BUS}==\"usb\", ENV{ID_VENDOR_ID}==\"$vendor\", ENV{ID_MODEL_ID}==\"$product\", ENV{VE_SERVICE}=\"${DEVICE_CLASS}\""
     if ! grep -qF "$rule" "$UDEV_RULES" 2>/dev/null; then
       echo "$rule" | run tee -a "$UDEV_RULES" > /dev/null
     fi
@@ -86,7 +85,7 @@ install_driver() {
     run "echo '#!/bin/sh' > \"$RC_LOCAL\""
     run chmod +x "$RC_LOCAL"
   fi
-  grep -qF "$DRIVER_SYMLINK" "$RC_LOCAL" || run "echo 'ln -sf \"$DRIVER_DIR\" \"$DRIVER_SYMLINK\"' >> \"$RC_LOCAL\""
+  grep -qF "$DRIVER_SYMLINK" "$RC_LOCAL" || run "echo 'ln -sf \"$DRIVER_DIR/service-template\" \"$DRIVER_SYMLINK\"' >> \"$RC_LOCAL\""
 
   echo "✅ Uninstall complete."
   echo "🔁 Please reboot the system to activate the serial-starter configuration."
@@ -96,7 +95,7 @@ uninstall_driver() {
   echo "🧹 Uninstalling $DRIVER_NAME"
   run rm -f "$DRIVER_SYMLINK"
   run rm -f "$CONF_FILE"
-  [ -f "$UDEV_RULES" ] && run sed -i "/VE_DEVICE_CLASS\\s*=\\s*\\\"${DEVICE_CLASS}\\\"/d" "$UDEV_RULES"
+  [ -f "$UDEV_RULES" ] && run sed -i "/VE_SERVICE.*${DEVICE_CLASS}/d" "$UDEV_RULES"
   [ -f "$RC_LOCAL" ] && run sed -i "/${DRIVER_SYMLINK}/d" "$RC_LOCAL"
 
   echo "✅ Uninstall complete."
